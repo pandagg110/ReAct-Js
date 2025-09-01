@@ -37,3 +37,4 @@ pids
 
 # OS generated files
 Thumbs.db
+.env
