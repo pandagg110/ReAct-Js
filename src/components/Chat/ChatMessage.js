@@ -163,6 +163,51 @@ const ActionDetails = styled.div`
   font-size: 13px;
 `;
 
+const ImagesContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0;
+`;
+
+const ImagePreview = styled.div`
+  position: relative;
+  max-width: 200px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: #f8f9fa;
+`;
+
+const PreviewImage = styled.img`
+  width: 100%;
+  height: auto;
+  display: block;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.02);
+  }
+`;
+
+const ImageInfo = styled.div`
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+
+  ${ImagePreview}:hover & {
+    opacity: 1;
+  }
+`;
+
 const LoadingIndicator = styled.div`
   display: flex;
   align-items: center;
@@ -234,7 +279,7 @@ const CodeBlock = ({ language, value }) => {
 };
 
 const ChatMessage = ({ message, isLoading = false }) => {
-  const { type, content, timestamp, action, args, executionTime } = message;
+  const { type, content, timestamp, action, args, executionTime, images } = message;
   
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return '';
@@ -281,6 +326,27 @@ const ChatMessage = ({ message, isLoading = false }) => {
             {content}
           </ReactMarkdown>
         </MessageText>
+        
+        {/* 显示图片 */}
+        {images && images.length > 0 && (
+          <ImagesContainer>
+            {images.map((image, index) => (
+              <ImagePreview key={index}>
+                <PreviewImage 
+                  src={image.url} 
+                  alt={image.name || `图片 ${index + 1}`}
+                  onClick={() => window.open(image.url, '_blank')}
+                />
+                <ImageInfo>
+                  <div>{image.name || `图片 ${index + 1}`}</div>
+                  {image.size && (
+                    <div>{Math.round(image.size / 1024)}KB</div>
+                  )}
+                </ImageInfo>
+              </ImagePreview>
+            ))}
+          </ImagesContainer>
+        )}
         
         {/* 显示行动详情 */}
         {type === 'action' && action && args && (

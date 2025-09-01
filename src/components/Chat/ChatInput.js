@@ -4,6 +4,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { Send, Loader2, Square } from 'lucide-react';
+import ImageUpload from './ImageUpload';
 
 const InputContainer = styled.div`
   display: flex;
@@ -153,6 +154,7 @@ const ChatInput = ({
   maxLength = 2000 
 }) => {
   const [message, setMessage] = useState('');
+  const [images, setImages] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const textareaRef = useRef(null);
 
@@ -187,9 +189,17 @@ const ChatInput = ({
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (message.trim() && !isLoading) {
-      onSendMessage(message.trim());
+    if ((message.trim() || images.length > 0) && !isLoading) {
+      // 准备发送的数据
+      const messageData = {
+        text: message.trim(),
+        images: images.map(img => img.file),
+        type: images.length > 0 ? 'image_message' : 'text_message'
+      };
+      
+      onSendMessage(messageData);
       setMessage('');
+      setImages([]);
       setShowSuggestions(false);
     }
   };
@@ -232,6 +242,12 @@ const ChatInput = ({
   return (
     <InputContainer>
       <InputWrapper>
+        <ImageUpload
+          images={images}
+          onImagesChange={setImages}
+          maxImages={1}
+          disabled={isLoading}
+        />
         {shouldShowSuggestions && (
           <SuggestionContainer>
             {suggestions.map((suggestion, index) => (
@@ -260,7 +276,7 @@ const ChatInput = ({
         <SendButton 
           type="button"
           onClick={handleSubmit}
-          disabled={!message.trim() || isLoading}
+          disabled={(!message.trim() && images.length === 0) || isLoading}
         >
           {isLoading ? (
             <Loader2 size={20} className="animate-spin" />

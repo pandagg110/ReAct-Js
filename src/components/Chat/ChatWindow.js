@@ -7,6 +7,7 @@ import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import { llmService } from '../../services/llmService';
 import { toolService } from '../../services/toolService';
+import { imageService } from '../../services/imageService';
 
 const ChatContainer = styled.div`
   display: flex;
@@ -219,13 +220,30 @@ const ChatWindow = () => {
   }, []);
 
   // 处理用户消息
-  const handleSendMessage = async (content) => {
-    if (!content.trim() || isLoading) return;
+  const handleSendMessage = async (messageData) => {
+    // 支持传统的字符串格式和新的对象格式
+    const isLegacyFormat = typeof messageData === 'string';
+    const hasText = isLegacyFormat ? messageData.trim() : messageData.text?.trim();
+    const hasImages = !isLegacyFormat && messageData.images && messageData.images.length > 0;
+    
+    if ((!hasText && !hasImages) || isLoading) return;
 
+    // 处理图片消息
+    if (!isLegacyFormat && hasImages) {
+      await handleImageMessage(messageData);
+    } else {
+      // 处理纯文本消息
+      const content = isLegacyFormat ? messageData : messageData.text;
+      await handleTextMessage(content.trim());
+    }
+  };
+
+  // 处理纯文本消息
+  const handleTextMessage = async (content) => {
     // 添加用户消息
     addMessage({
       type: 'user',
-      content: content.trim()
+      content: content
     });
 
     setIsLoading(true);
@@ -235,13 +253,91 @@ const ChatWindow = () => {
     abortControllerRef.current = new AbortController();
 
     try {
-      await executeReActLoop(content.trim());
+      await executeReActLoop(content);
     } catch (error) {
       if (error.name !== 'AbortError') {
         console.error('Chat error:', error);
         addMessage({
           type: 'error',
           content: `❌ **发生错误**\n\n${error.message || '未知错误'}`
+        });
+      }
+    } finally {
+      setIsLoading(false);
+      setCurrentStep(0);
+    }
+  };
+
+  // 处理图片消息
+  const handleImageMessage = async (messageData) => {
+    const { text, images } = messageData;
+    
+    // 添加用户消息（包含图片）
+    addMessage({
+      type: 'user',
+      content: text || '请分析这张图片',
+      images: images.map(file => ({
+        name: file.name,
+        size: file.size,
+        url: URL.createObjectURL(file)
+      }))
+    });
+
+    setIsLoading(true);
+    setCurrentStep(0);
+
+    // 创建终止控制器
+    abortControllerRef.current = new AbortController();
+
+    try {
+      // 识别图片
+      const imageResults = [];
+      for (const imageFile of images) {
+        try {
+          addMessage({
+            type: 'assistant',
+            content: `🖼️ **正在识别图片: ${imageFile.name}**\n\n请稍候...`
+          });
+
+          const result = await imageService.recognizeImage(imageFile);
+          
+          addMessage({
+            type: 'assistant',
+            content: `✅ **图片识别完成**\n\n${result.content}`
+          });
+
+          imageResults.push({
+            fileName: imageFile.name,
+            recognition: result.content
+          });
+        } catch (error) {
+          console.error('Image recognition error:', error);
+          addMessage({
+            type: 'error',
+            content: `❌ **图片识别失败: ${imageFile.name}**\n\n${error.message}`
+          });
+        }
+      }
+
+      // 如果有成功识别的图片，继续进行ReAct处理
+      if (imageResults.length > 0 && !abortControllerRef.current?.signal.aborted) {
+        const imageContext = imageResults.map(result => 
+          `图片"${result.fileName}"的识别结果: ${result.recognition}`
+        ).join('\n\n');
+        
+        const fullPrompt = text ? 
+          `${text}\n\n图片识别信息:\n${imageContext}` : 
+          `请根据以下图片识别结果进行分析:\n${imageContext}`;
+
+        await executeReActLoop(fullPrompt);
+      }
+
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error('Image message error:', error);
+        addMessage({
+          type: 'error',
+          content: `❌ **处理图片消息时发生错误**\n\n${error.message || '未知错误'}`
         });
       }
     } finally {
